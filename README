@@ -1,0 +1,8 @@
+fssh
+----
+Fssh is simply a fake SSH client ("f" for "fake"). It is not really fake
+however, it is still fully functional. The use case of this kind of tool is
+mostly social engineering.
+
+This is one of my C learning projects. In this project, I learn about OS and
+processes. It is not finished yet.
