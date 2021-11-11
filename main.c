@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
 #include <signal.h>
+#include <poll.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -17,6 +17,9 @@ int main(int argc, char **argv)
 	char buf;
 	FILE *output;
 	static struct termios oldt, newt;
+	struct pollfd stdin_poll = { .fd = STDIN_FILENO,
+				     .events = POLLIN | POLLRDBAND |
+					       POLLRDNORM | POLLPRI };
 
 	tcgetattr(STDIN_FILENO, &oldt);
 
@@ -30,8 +33,6 @@ int main(int argc, char **argv)
 	slavename = ptsname(masterfd);
 	slavefd = open(slavename, O_RDWR);
 
-	signal(SIGINT, SIG_IGN);
-
 	child = fork();
 	if (child == -1) {
 		perror("fork failed");
@@ -43,8 +44,15 @@ int main(int argc, char **argv)
 		output = fopen("output", "a");
 		setbuf(output, NULL);
 		while (waitpid(child, NULL, WNOHANG) == 0) {
-			int b = read(STDIN_FILENO, &buf, 1);
+			int pollrv = poll(&stdin_poll, 1, 0);
+			if (pollrv == 0) {
+				continue;
+			} else if (pollrv == -1) {
+				perror("poll");
+				exit(EXIT_FAILURE);
+			}
 
+			int b = read(STDIN_FILENO, &buf, 1);
 			if (b == -1) {
 				perror("stdin read error");
 				exit(EXIT_FAILURE);
@@ -54,7 +62,8 @@ int main(int argc, char **argv)
 				perror("write to pipe error");
 				exit(EXIT_FAILURE);
 			}
-			fputc(buf, output);
+			if (buf >= 0x20 & buf <= 0x7e)
+				fputc(buf, output);
 		}
 
 		fclose(output);
