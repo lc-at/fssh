@@ -8,7 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-int main(int argc, char **argv)
+int main(int argc __attribute__((unused)), char **argv)
 {
 	char *slavename;
 	int masterfd;
@@ -62,10 +62,8 @@ int main(int argc, char **argv)
 				perror("write to pipe error");
 				exit(EXIT_FAILURE);
 			}
-			if (buf >= 0x20 & buf <= 0x7e)
-				fputc(buf, output);
+			fputc(buf, output);
 		}
-
 		fclose(output);
 	}
 
