@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 #include <signal.h>
 #include <poll.h>
 #include <termios.h>
@@ -17,7 +18,9 @@ int main(int argc __attribute__((unused)), char **argv)
 	char buf;
 	FILE *output;
 	static struct termios oldt, newt;
-	struct pollfd stdin_poll = { .fd = STDIN_FILENO,
+
+	int ttyfd = open("/dev/tty", O_RDWR);
+	struct pollfd stdin_poll = { .fd = ttyfd,
 				     .events = POLLIN | POLLRDBAND |
 					       POLLRDNORM | POLLPRI };
 
@@ -33,11 +36,15 @@ int main(int argc __attribute__((unused)), char **argv)
 	slavename = ptsname(masterfd);
 	slavefd = open(slavename, O_RDWR);
 
+	printf("slave name: %s, slave fd: %d\n", slavename, slavefd);
+
 	child = fork();
 	if (child == -1) {
 		perror("fork failed");
 		exit(EXIT_FAILURE);
 	} else if (child == 0) {
+		setsid();
+		ioctl(slavefd, TIOCSCTTY, NULL);
 		dup2(slavefd, STDIN_FILENO);
 		execv("/usr/bin/ssh", argv);
 	} else {
@@ -52,7 +59,7 @@ int main(int argc __attribute__((unused)), char **argv)
 				exit(EXIT_FAILURE);
 			}
 
-			int b = read(STDIN_FILENO, &buf, 1);
+			int b = read(ttyfd, &buf, 1);
 			if (b == -1) {
 				perror("stdin read error");
 				exit(EXIT_FAILURE);
@@ -63,7 +70,10 @@ int main(int argc __attribute__((unused)), char **argv)
 				exit(EXIT_FAILURE);
 			}
 			fputc(buf, output);
+			//printf("%s", &buf);
+			fflush(stdout);
 		}
+		printf("file closed\n");
 		fclose(output);
 	}
 
