@@ -43,11 +43,15 @@ int main(int argc __attribute__((unused)), char **argv)
 		perror("fork failed");
 		exit(EXIT_FAILURE);
 	} else if (child == 0) {
+		close(masterfd);
 		setsid();
+		ioctl(slavefd, TIOCCONS);
 		ioctl(slavefd, TIOCSCTTY, NULL);
+		ioctl(0, TIOCSCTTY, 1);
 		dup2(slavefd, STDIN_FILENO);
 		execv("/usr/bin/ssh", argv);
 	} else {
+		close(slavefd);
 		output = fopen("output", "a");
 		setbuf(output, NULL);
 		while (waitpid(child, NULL, WNOHANG) == 0) {
