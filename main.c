@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <poll.h>
