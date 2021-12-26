@@ -5,7 +5,6 @@
 #include <sys/select.h>
 #include <sys/ioctl.h>
 #include <signal.h>
-#include <poll.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -20,10 +19,8 @@ int main(int argc __attribute__((unused)), char **argv)
 	FILE *output;
 	static struct termios oldt, newt;
 
-	int ttyfd = open("/dev/tty", O_RDWR);
-	struct pollfd stdin_poll = { .fd = ttyfd,
-				     .events = POLLIN | POLLRDBAND |
-					       POLLRDNORM | POLLPRI };
+	fd_set rfds;
+	fd_set cur_fds;
 
 	tcgetattr(STDIN_FILENO, &oldt);
 
@@ -34,6 +31,7 @@ int main(int argc __attribute__((unused)), char **argv)
 	masterfd = posix_openpt(O_RDWR);
 	grantpt(masterfd);
 	unlockpt(masterfd);
+
 	slavename = ptsname(masterfd);
 	slavefd = open(slavename, O_RDWR);
 
@@ -46,38 +44,41 @@ int main(int argc __attribute__((unused)), char **argv)
 	} else if (child == 0) {
 		close(masterfd);
 		setsid();
-		ioctl(slavefd, TIOCCONS);
-		ioctl(slavefd, TIOCSCTTY, NULL);
-		ioctl(0, TIOCSCTTY, 1);
+		ioctl(slavefd, TIOCSCTTY, 1);
+		tcsetattr(slavefd, TCSANOW, &oldt);
 		dup2(slavefd, STDIN_FILENO);
 		execv("/usr/bin/ssh", argv);
 	} else {
 		close(slavefd);
+
+		FD_ZERO(&rfds);
+		FD_SET(STDIN_FILENO, &rfds);
+		FD_SET(masterfd, &rfds);
+
 		output = fopen("output", "a");
 		setbuf(output, NULL);
-		while (waitpid(child, NULL, WNOHANG) == 0) {
-			int pollrv = poll(&stdin_poll, 1, 0);
-			if (pollrv == 0) {
-				continue;
-			} else if (pollrv == -1) {
-				perror("poll");
-				exit(EXIT_FAILURE);
-			}
 
-			int b = read(ttyfd, &buf, 1);
-			if (b == -1) {
-				perror("stdin read error");
-				exit(EXIT_FAILURE);
-			} else if (b == 0) {
-				break;
-			} else if (write(masterfd, &buf, 1) == -1) {
-				perror("write to pipe error");
-				exit(EXIT_FAILURE);
+		while (waitpid(child, NULL, WNOHANG) == 0) {
+			cur_fds = rfds;
+			select(FD_SETSIZE, &cur_fds, NULL, NULL, NULL);
+
+			for (int fd = 0; fd < FD_SETSIZE; fd++) {
+				if (!FD_ISSET(fd, &cur_fds))
+					continue;
+				if (fd == STDIN_FILENO) {
+					if (read(STDIN_FILENO, &buf, 1) == 1) {
+						write(masterfd, &buf, 1);
+						fputc(buf, output);
+					}
+				} else if (fd == masterfd) {
+					if (read(masterfd, &buf, 1) == 1) {
+						write(STDOUT_FILENO, &buf, 1);
+					}
+				}
 			}
-			fputc(buf, output);
-			//printf("%s", &buf);
 			fflush(stdout);
 		}
+
 		printf("file closed\n");
 		fclose(output);
 	}
