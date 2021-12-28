@@ -43,10 +43,14 @@ int main(int argc __attribute__((unused)), char **argv)
 		exit(EXIT_FAILURE);
 	} else if (child == 0) {
 		close(masterfd);
-		setsid();
-		ioctl(slavefd, TIOCSCTTY, 1);
-		tcsetattr(slavefd, TCSANOW, &oldt);
+
 		dup2(slavefd, STDIN_FILENO);
+		dup2(slavefd, STDOUT_FILENO);
+		dup2(slavefd, STDERR_FILENO);
+
+		setsid();
+		ioctl(0, TIOCSCTTY, 1);
+
 		execv("/usr/bin/ssh", argv);
 	} else {
 		close(slavefd);
