@@ -35,8 +35,6 @@ int main(int argc __attribute__((unused)), char **argv)
 	slavename = ptsname(masterfd);
 	slavefd = open(slavename, O_RDWR);
 
-	printf("slave name: %s, slave fd: %d\n", slavename, slavefd);
-
 	child = fork();
 	if (child == -1) {
 		perror("fork failed");
